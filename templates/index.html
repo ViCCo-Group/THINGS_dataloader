@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Select Datasets</title>
+</head>
+<body>
+    <h1>Select Datasets to Download</h1>
+    <form id="dataset-form" action="/download" method="post">
+        {% for dataset in datasets %}
+            <div>
+                <input type="checkbox" name="datasets" value="{{ dataset.name }}">
+                <label>{{ dataset.name }} - {{ dataset.description }}</label>
+            </div>
+        {% endfor %}
+        <button type="submit">Download</button>
+    </form>
+
+    <script>
+        document.getElementById('dataset-form').onsubmit = function(event) {
+            event.preventDefault(); // Prevent the form from submitting traditionally
+
+            // Get the selected datasets
+            var formData = new FormData(this);
+            var selectedDatasets = formData.getAll('datasets');
+
+            if (selectedDatasets.length === 0) {
+                alert("Please select at least one dataset.");
+                return;
+            }
+
+            fetch('/download', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json()) // Expecting a JSON response with download links
+            .then(downloadLinks => {
+                // Function to trigger a download with a slight delay
+                function downloadWithDelay(links, index) {
+                    if (index >= links.length) return; // Stop when all links are processed
+
+                    // Create a temporary <a> element to trigger the download
+                    var a = document.createElement('a');
+                    a.href = links[index];
+                    a.download = '';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+
+                    // Schedule the next download after a slight delay (e.g., 500ms)
+                    setTimeout(function() {
+                        downloadWithDelay(links, index + 1);
+                    }, 500);
+                }
+
+                // Start the download process with the first link
+                downloadWithDelay(downloadLinks, 0);
+            })
+            .catch(error => console.error('Error:', error));
+        };
+    </script>
+</body>
+</html>

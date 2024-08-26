@@ -1,0 +1,3 @@
+name,description,download_urls
+THINGS-fMRI1: Brain masks,Brain masks for the fMRI data,"https://plus.figshare.com/ndownloader/files/36682242"
+THINGS-fMRI1: Pycortex,Cortical flat maps for three subjects derived from the anatomical MRI images. Cortical surfaces were reconstructed from T1-weighted and T2-weighted anatomical images with freesurfer's reconall procedure. Relaxation cuts were placed manually to allow for flattening of each hemisphere's surface. Results of any analysis of the fMRI data can be viewed on these flat maps with pycortex.,"https://plus.figshare.com/ndownloader/files/36693528"
