@@ -6,22 +6,22 @@ from flask import Flask, render_template, request, send_file
 
 app = Flask(__name__)
 
-DATASET_CSV = 'static/datasets.csv'
-
 def load_datasets():
     datasets = {}
-    with open(DATASET_CSV, mode='r') as file:
+    with open('static/datasets.csv', mode='r') as file:
         csv_reader = csv.DictReader(file)
         for row in csv_reader:
             name = row['name']
             sub_dataset_name = row['sub-dataset name']
             description = row['description']
+            files = row['files'].split(',')  # Convert the files column into a list
             download_url = row['download_url']
             if name not in datasets:
                 datasets[name] = []
             datasets[name].append({
                 'sub_dataset_name': sub_dataset_name,
                 'description': description,
+                'files': files,
                 'download_url': download_url
             })
     return datasets
@@ -42,11 +42,23 @@ def download():
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, 'w') as zip_file:
         for url in selected_urls:
-            # Extract filename from URL
-            filename = url.split('/')[-1].split('?')[0]
-            # Download file and add to zip
-            response = requests.get(url)
-            zip_file.writestr(filename, response.content)
+            try:
+                # Download the zip file from the URL
+                response = requests.get(url)
+                response.raise_for_status()
+                
+                # Read the downloaded zip file
+                with io.BytesIO(response.content) as temp_zip:
+                    with zipfile.ZipFile(temp_zip) as temp_zip_file:
+                        # Extract all files from the temporary zip
+                        for file_info in temp_zip_file.infolist():
+                            with temp_zip_file.open(file_info) as file:
+                                # Add each file to the final zip archive
+                                zip_file.writestr(file_info, file.read())
+            except requests.RequestException as e:
+                return f"Error downloading file: {e}", 500
+            except zipfile.BadZipFile as e:
+                return f"Error processing zip file: {e}", 500
 
     zip_buffer.seek(0)
     return send_file(zip_buffer, as_attachment=True, download_name='datasets.zip', mimetype='application/zip')

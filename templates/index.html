@@ -8,22 +8,27 @@
     <style>
         .dataset-item {
             display: flex;
-            align-items: flex-start; /* Align items at the top */
+            align-items: flex-start;
             padding: 10px;
             border-bottom: 1px solid #dee2e6;
         }
         .dataset-item input[type="checkbox"] {
             margin-right: 15px;
-            margin-top: 5px; /* Align checkbox with text */
+            margin-top: 5px;
         }
         .dataset-item .content {
-            flex: 1; /* Ensure the text takes up the remaining space */
+            flex: 1;
         }
         .dataset-item .description {
-            font-size: 0.875rem; /* Adjust description font size */
+            font-size: 0.875rem;
         }
         .dataset-item strong {
-            display: block; /* Ensure the sub-dataset name is on a new line */
+            display: block;
+        }
+        .files-list {
+            margin-top: 10px;
+            list-style-type: disc;
+            margin-left: 20px;
         }
     </style>
 </head>
@@ -49,6 +54,13 @@
                                         <strong>{{ item.sub_dataset_name }}</strong>
                                         <div class="description">
                                             {{ item.description }}
+                                            {% if item.files %}
+                                            <ul class="files-list">
+                                                {% for file in item.files %}
+                                                <li>{{ file }}</li>
+                                                {% endfor %}
+                                            </ul>
+                                            {% endif %}
                                         </div>
                                     </div>
                                 </div>
