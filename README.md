@@ -4,7 +4,7 @@ This repo is under active development and will let you query and load data from 
 
 # Run locally
 
-`pip install flake8`<br>
+`pip install flask`<br>
 `git clone git@github.com:ViCCo-Group/THINGS_dataloader.git`<br>
 `cd THINGS_dataloader`<br>
 `python app.py`
