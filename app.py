@@ -1,17 +1,29 @@
-from flask import Flask, render_template, request, jsonify
 import csv
+import io
+import zipfile
+import requests
+from flask import Flask, render_template, request, send_file
 
 app = Flask(__name__)
 
 DATASET_CSV = 'static/datasets.csv'
 
 def load_datasets():
-    datasets = []
+    datasets = {}
     with open(DATASET_CSV, mode='r') as file:
         csv_reader = csv.DictReader(file)
         for row in csv_reader:
-            row['download_urls'] = row['download_urls'].split(',')
-            datasets.append(row)
+            name = row['name']
+            sub_dataset_name = row['sub-dataset name']
+            description = row['description']
+            download_url = row['download_url']
+            if name not in datasets:
+                datasets[name] = []
+            datasets[name].append({
+                'sub_dataset_name': sub_dataset_name,
+                'description': description,
+                'download_url': download_url
+            })
     return datasets
 
 @app.route('/')
@@ -21,20 +33,23 @@ def index():
 
 @app.route('/download', methods=['POST'])
 def download():
-    selected_datasets = request.form.getlist('datasets')
+    selected_urls = request.form.getlist('datasets')
     
-    if not selected_datasets:
-        return "No dataset selected.", 400
-    
-    datasets = load_datasets()
-    download_links = []
-    
-    for dataset in datasets:
-        if dataset['name'] in selected_datasets:
-            download_links.extend(dataset['download_urls'])
-    
-    # Return the list of download links as a JSON response
-    return jsonify(download_links)
+    if not selected_urls:
+        return "No datasets selected", 400
+
+    # Create a zip file in memory
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w') as zip_file:
+        for url in selected_urls:
+            # Extract filename from URL
+            filename = url.split('/')[-1].split('?')[0]
+            # Download file and add to zip
+            response = requests.get(url)
+            zip_file.writestr(filename, response.content)
+
+    zip_buffer.seek(0)
+    return send_file(zip_buffer, as_attachment=True, download_name='datasets.zip', mimetype='application/zip')
 
 if __name__ == '__main__':
     app.run(debug=True)
