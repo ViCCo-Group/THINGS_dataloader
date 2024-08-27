@@ -14,7 +14,7 @@ def load_datasets():
             name = row['name']
             sub_dataset_name = row['sub-dataset name']
             description = row['description']
-            files = row['files'].split(',')  # Convert the files column into a list
+            files = row['files'].split(',')  
             download_url = row['download_url']
             if name not in datasets:
                 datasets[name] = []
