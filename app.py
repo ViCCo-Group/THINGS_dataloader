@@ -14,22 +14,37 @@ def load_datasets():
             name = row['name']
             sub_dataset_name = row['sub-dataset name']
             description = row['description']
-            files = row['files'].split(',')  
+            files = row['files'].split(',')
             download_url = row['download_url']
+            size = row['size']
+            
             if name not in datasets:
                 datasets[name] = []
+
             datasets[name].append({
                 'sub_dataset_name': sub_dataset_name,
                 'description': description,
                 'files': files,
-                'download_url': download_url
+                'download_url': download_url,
+                'size': size
             })
     return datasets
+
+def load_descriptions():
+    descriptions = {}
+    with open('static/dataset_descriptions.csv', mode='r') as file:
+        csv_reader = csv.DictReader(file)
+        for row in csv_reader:
+            name = row['name']
+            name_description = row['name_description']
+            descriptions[name] = name_description
+    return descriptions
 
 @app.route('/')
 def index():
     datasets = load_datasets()
-    return render_template('index.html', datasets=datasets)
+    descriptions = load_descriptions()
+    return render_template('index.html', datasets=datasets, descriptions=descriptions)
 
 @app.route('/download', methods=['POST'])
 def download():
