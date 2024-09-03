@@ -70,7 +70,7 @@
                                             {% if item.files %}
                                             <ul class="files-list">
                                                 {% for file in item.files %}
-                                                <li>{{ file }}</li>
+                                                <li>{{ file }}</li>  <!-- Treat each entry as a single bullet point -->
                                                 {% endfor %}
                                             </ul>
                                             {% endif %}

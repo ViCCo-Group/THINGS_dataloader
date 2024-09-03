@@ -3,6 +3,7 @@ import zipfile
 import shutil
 import tempfile
 import os
+import pandas as pd
 import requests
 from flask import Flask, render_template, request, send_file
 
@@ -10,13 +11,13 @@ app = Flask(__name__)
 
 def load_datasets():
     datasets = {}
-    with open('static/datasets.csv', mode='r') as file:
+    with open('app/static/datasets.csv', mode='r') as file:
         csv_reader = csv.DictReader(file)
         for row in csv_reader:
             name = row['name']
             sub_dataset_name = row['sub-dataset name']
             description = row['description']
-            files = row['files'].split(',')
+            files = row['files'].split('; ')
             download_url = row['download_url']
             size = row['size']
             
@@ -35,7 +36,7 @@ def load_datasets():
 
 def load_descriptions():
     descriptions = {}
-    with open('static/dataset_descriptions.csv', mode='r') as file:
+    with open('app/static/dataset_descriptions.csv', mode='r') as file:
         csv_reader = csv.DictReader(file)
         for row in csv_reader:
             name = row['name']
@@ -66,12 +67,28 @@ def extract_and_rename_zip(zip_path, extract_to, new_folder_name):
         print(f"An error occurred: {e}")
 
 def zip_all_folders(source_dir, output_zip):
-    with zipfile.ZipFile(output_zip, 'w', zipfile.ZIP_DEFLATED) as zipf:
-        for foldername, subfolders, filenames in os.walk(source_dir):
-            for filename in filenames:
-                file_path = os.path.join(foldername, filename)
-                arcname = os.path.relpath(file_path, source_dir)
-                zipf.write(file_path, arcname)
+    try:
+        with zipfile.ZipFile(output_zip, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            for foldername, subfolders, filenames in os.walk(source_dir):
+                for filename in filenames:
+                    file_path = os.path.join(foldername, filename)
+                    arcname = os.path.relpath(file_path, source_dir)
+                    zipf.write(file_path, arcname)
+        print(f"Successfully created {output_zip}.")
+    except Exception as e:
+        print(f"Error creating zip file: {e}")
+
+def download_file(url, output_path):
+    """Download a file from a URL and save it to the specified path."""
+    try:
+        response = requests.get(url, stream=True)
+        response.raise_for_status()  # Raises HTTPError for bad responses
+        with open(output_path, 'wb') as file:
+            for chunk in response.iter_content(chunk_size=8192):
+                file.write(chunk)
+    except requests.RequestException as e:
+        print(f"Error downloading file from {url}: {e}")
+        raise
 
 @app.route('/')
 def index():
@@ -97,7 +114,6 @@ def download():
         extracted_folders = []
 
         for url in selected_urls:
-            # Identify the dataset entry corresponding to the URL
             dataset_info = next(
                 (item for items in datasets.values() for item in items if item['download_url'] == url), 
                 None
@@ -107,27 +123,42 @@ def download():
                 continue
             
             folder_name = dataset_info['folder_name']
-            zip_path = os.path.join(download_dir, folder_name + '.zip')
+            files = dataset_info['files']
 
-            try:
-                # Download the zip file
-                response = requests.get(url, stream=True)
-                response.raise_for_status()
-
-                with open(zip_path, 'wb') as zip_file:
-                    zip_file.write(response.content)
-
-                # Extract and rename the zip file
-                extract_and_rename_zip(zip_path, extracted_dir, folder_name)
-                extracted_folders.append(os.path.join(extracted_dir, folder_name))
+            if 'figshare' in url:
+                zip_path = os.path.join(download_dir, folder_name + '.zip')
                 
-            except requests.RequestException as e:
-                return f"Error downloading file: {e}", 500
-            except zipfile.BadZipFile as e:
-                return f"Error processing zip file: {e}", 500
+                try:
+                    # Download the zip file
+                    download_file(url, zip_path)
+
+                    # Extract and rename the zip file
+                    extract_and_rename_zip(zip_path, extracted_dir, folder_name)
+                    extracted_folders.append(os.path.join(extracted_dir, folder_name))
+                    
+                except requests.RequestException as e:
+                    return f"Error downloading file: {e}", 500
+                except zipfile.BadZipFile as e:
+                    return f"Error processing zip file: {e}", 500
+            
+            elif 'osf' in url:
+                folder_path = os.path.join(extracted_dir, folder_name)
+                os.makedirs(folder_path, exist_ok=True)
+                
+                try:
+                    # Directly download the file from the OSF URL
+                    file_path = os.path.join(folder_path, 'downloaded_file')
+                    download_file(url, file_path)
+                    extracted_folders.append(folder_path)
+                
+                except requests.RequestException as e:
+                    return f"Error downloading file: {e}", 500
 
         main_zip_path = os.path.join(temp_dir, 'things-datasets.zip')
         zip_all_folders(extracted_dir, main_zip_path)
+
+        if not os.path.exists(main_zip_path) or os.path.getsize(main_zip_path) == 0:
+            return "Failed to create the zip file", 500
 
         return send_file(main_zip_path, as_attachment=True, download_name='things-datasets.zip', mimetype='application/zip')
 
