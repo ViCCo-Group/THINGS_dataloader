@@ -4,8 +4,10 @@ This repo is under active development and will let you query and load data from 
 
 ## Run dataloader as a web interface locally
 
+**Not recommended** for heavy data download. Use the [command line interface](https://github.com/ViCCo-Group/THINGS-dataloader_cli) instead. 
+
 `pip install flask`<br>
-`git clone git@github.com:ViCCo-Group/THINGS_dataloader.git`<br>
+`git clone git@github.com:ViCCo-Group/THINGS-dataloader_website.git`<br>
 `cd THINGS_dataloader`<br>
 `python website/app.py`
 
