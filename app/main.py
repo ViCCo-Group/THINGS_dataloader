@@ -3,7 +3,6 @@ import zipfile
 import shutil
 import tempfile
 import os
-import pandas as pd
 import requests
 from flask import Flask, render_template, request, send_file
 
@@ -90,6 +89,17 @@ def download_file(url, output_path):
         print(f"Error downloading file from {url}: {e}")
         raise
 
+def get_filename_from_response(response):
+    """Extract filename from the Content-Disposition header if available."""
+    content_disposition = response.headers.get('Content-Disposition')
+    if content_disposition:
+        parts = content_disposition.split(';')
+        for part in parts:
+            if 'filename=' in part:
+                filename = part.split('=')[-1].strip('"')
+                return filename
+    return None
+
 @app.route('/')
 def index():
     datasets = load_datasets()
@@ -146,8 +156,15 @@ def download():
                 os.makedirs(folder_path, exist_ok=True)
                 
                 try:
-                    # Directly download the file from the OSF URL
-                    file_path = os.path.join(folder_path, 'downloaded_file')
+                    # Download the file from OSF and get the original filename
+                    response = requests.get(url, stream=True)
+                    response.raise_for_status()
+
+                    filename = get_filename_from_response(response)
+                    if filename is None:
+                        filename = url.split('/')[-1]  # Use the last part of URL as fallback
+                    
+                    file_path = os.path.join(folder_path, filename)
                     download_file(url, file_path)
                     extracted_folders.append(folder_path)
                 
