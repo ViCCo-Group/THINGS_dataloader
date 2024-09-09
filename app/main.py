@@ -44,20 +44,22 @@ def load_descriptions():
     return descriptions
 
 def extract_zip(zip_path, extract_to):
-    """Extracts a zip file and handles nested zips if any."""
+    """Extracts a zip file and moves its contents to the specified directory."""
     try:
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(extract_to)
+        temp_extract_to = os.path.join(extract_to, 'temp_extract')
+        os.makedirs(temp_extract_to, exist_ok=True)
 
-        # Check for nested zip files and extract them as well
-        for root, _, files in os.walk(extract_to):
-            for file in files:
-                if file.endswith('.zip'):
-                    nested_zip_path = os.path.join(root, file)
-                    nested_extract_to = os.path.join(root, file[:-4])  # Removing .zip from the folder name
-                    os.makedirs(nested_extract_to, exist_ok=True)
-                    extract_zip(nested_zip_path, nested_extract_to)
-                    os.remove(nested_zip_path)  # Optionally remove the nested zip file after extraction
+        # Extract the contents to a temporary location
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(temp_extract_to)
+
+        # Move all files and directories from the temporary location to the main folder
+        for item in os.listdir(temp_extract_to):
+            item_path = os.path.join(temp_extract_to, item)
+            shutil.move(item_path, extract_to)  # Move to the main extract_to path
+
+        # Remove the temporary extraction directory after moving its contents
+        shutil.rmtree(temp_extract_to)
 
     except zipfile.BadZipFile as e:
         print(f"Error extracting {zip_path}: {e}")
@@ -153,28 +155,29 @@ def download():
             elif 'osf' in url:
                 folder_path = os.path.join(extracted_dir, folder_name)
                 os.makedirs(folder_path, exist_ok=True)
-                
-                try:
-                    # Download the file from OSF and get the original filename
-                    response = requests.get(url, stream=True)
-                    response.raise_for_status()
 
-                    filename = get_filename_from_response(response)
-                    if filename is None:
-                        filename = url.split('/')[-1]  # Use the last part of URL as fallback
-                    
-                    file_path = os.path.join(folder_path, filename)
-                    download_file(url, file_path)
+            try:
+                # Download the file from OSF and get the original filename
+                response = requests.get(url, stream=True)
+                response.raise_for_status()
 
-                    # Check if the downloaded file is a zip and extract if true
-                    if file_path.endswith('.zip'):
-                        extract_zip(file_path, folder_path)
-                        os.remove(file_path)  # Optionally remove the zip file after extraction
-                    
-                    extracted_folders.append(folder_path)
+                filename = get_filename_from_response(response)
+                if filename is None:
+                    filename = url.split('/')[-1]  # Use the last part of URL as fallback
                 
-                except requests.RequestException as e:
-                    return f"Error downloading file: {e}", 500
+                file_path = os.path.join(folder_path, filename)
+                download_file(url, file_path)
+
+                # Check if the downloaded file is a zip and extract if true
+                if file_path.endswith('.zip'):
+                    # Extract the zip file and move its contents into the main folder path
+                    extract_zip(file_path, folder_path)
+                    os.remove(file_path)  # Remove the original zip file
+                
+                extracted_folders.append(folder_path)
+
+            except requests.RequestException as e:
+                return f"Error downloading file: {e}", 500
 
         main_zip_path = os.path.join(temp_dir, 'things-datasets.zip')
         zip_all_folders(extracted_dir, main_zip_path)
