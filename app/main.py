@@ -43,25 +43,24 @@ def load_descriptions():
             descriptions[name] = name_description
     return descriptions
 
-def extract_and_rename_zip(zip_path, extract_to, new_folder_name):
+def extract_zip(zip_path, extract_to):
+    """Extracts a zip file and handles nested zips if any."""
     try:
-        temp_extract_to = os.path.join(extract_to, 'temp_extract')
-        os.makedirs(temp_extract_to, exist_ok=True)
-
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(temp_extract_to)
+            zip_ref.extractall(extract_to)
 
-        top_level_dir = os.listdir(temp_extract_to)[0]
-        original_top_level_dir = os.path.join(temp_extract_to, top_level_dir)
-        new_path = os.path.join(extract_to, new_folder_name)
-        
-        shutil.move(original_top_level_dir, new_path)
-        shutil.rmtree(temp_extract_to)
+        # Check for nested zip files and extract them as well
+        for root, _, files in os.walk(extract_to):
+            for file in files:
+                if file.endswith('.zip'):
+                    nested_zip_path = os.path.join(root, file)
+                    nested_extract_to = os.path.join(root, file[:-4])  # Removing .zip from the folder name
+                    os.makedirs(nested_extract_to, exist_ok=True)
+                    extract_zip(nested_zip_path, nested_extract_to)
+                    os.remove(nested_zip_path)  # Optionally remove the nested zip file after extraction
 
     except zipfile.BadZipFile as e:
         print(f"Error extracting {zip_path}: {e}")
-    except FileNotFoundError as e:
-        print(f"File not found: {e}")
     except Exception as e:
         print(f"An error occurred: {e}")
 
@@ -143,7 +142,7 @@ def download():
                     download_file(url, zip_path)
 
                     # Extract and rename the zip file
-                    extract_and_rename_zip(zip_path, extracted_dir, folder_name)
+                    extract_zip(zip_path, os.path.join(extracted_dir, folder_name))
                     extracted_folders.append(os.path.join(extracted_dir, folder_name))
                     
                 except requests.RequestException as e:
@@ -166,6 +165,12 @@ def download():
                     
                     file_path = os.path.join(folder_path, filename)
                     download_file(url, file_path)
+
+                    # Check if the downloaded file is a zip and extract if true
+                    if file_path.endswith('.zip'):
+                        extract_zip(file_path, folder_path)
+                        os.remove(file_path)  # Optionally remove the zip file after extraction
+                    
                     extracted_folders.append(folder_path)
                 
                 except requests.RequestException as e:
