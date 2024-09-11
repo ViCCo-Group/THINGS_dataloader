@@ -21,6 +21,7 @@ def load_datasets():
             download_url = row['download_url']
             size = row['size']
             include_files = row['include_files'].split('; ')
+            code = row.get('code', '')  # Fetch the code, if present
 
             if name not in datasets:
                 datasets[name] = []
@@ -32,7 +33,8 @@ def load_datasets():
                 'download_url': download_url,
                 'size': size,
                 'folder_name': f"{name}_{sub_dataset_name.replace(' ', '_')}",
-                'include_files': include_files
+                'include_files': include_files,
+                'code': code
             })
     return datasets
 
@@ -144,6 +146,23 @@ def download_dataset_openneuro(dataset_id, include_files, download_path):
         print(f"Error during download: {e}")
         raise
 
+def create_readme(selected_urls, datasets, descriptions, readme_path):
+    with open(readme_path, 'w') as readme:
+        for name, items in datasets.items():
+            for item in items:
+                # Check if the dataset's download URL is in the selected URLs
+                if item['download_url'] in selected_urls:
+                    name_description = descriptions.get(name, 'No description available')
+                    readme.write(f"Name: {name}\n")
+                    readme.write(f"Name Description: {name_description}\n")
+                    readme.write(f"Sub-dataset Name: {item['sub_dataset_name']}\n")
+                    readme.write(f"Description: {item['description']}\n")
+                    readme.write(f"Files: {', '.join(item['files'])}\n")
+                    readme.write(f"Download URL: {item['download_url']}\n")
+                    readme.write(f"Size: {item['size']}\n")
+                    readme.write(f"Code: {item['code']}\n")
+                    readme.write("\n---\n\n")
+
 @app.route('/')
 def index():
     datasets = load_datasets()
@@ -153,11 +172,12 @@ def index():
 @app.route('/download', methods=['POST'])
 def download():
     selected_urls = request.form.getlist('datasets')
-    
+
     if not selected_urls:
         return "No datasets selected", 400
 
     datasets = load_datasets()
+    descriptions = load_descriptions()
 
     with tempfile.TemporaryDirectory() as temp_dir:
         download_dir = os.path.join(temp_dir, 'downloads')
@@ -172,14 +192,13 @@ def download():
                 (item for items in datasets.values() for item in items if item['download_url'] == url), 
                 None
             )
-            
+
             if not dataset_info:
                 continue
-            
+
             folder_name = dataset_info['folder_name']
             files = dataset_info['files']
             include_files = dataset_info.get('include_files')
-
 
             if 'figshare' in url:
                 zip_path = os.path.join(download_dir, folder_name + '.zip')
@@ -229,11 +248,14 @@ def download():
                 except Exception as e:
                     return f"Error executing openneuro-py command: {e}", 500
 
+
+        readme_path = os.path.join(extracted_dir, 'README.txt')
+        create_readme(selected_urls, datasets, descriptions, readme_path)  # Create the README file with only selected datasets
+
         main_zip_path = os.path.join(temp_dir, 'things-datasets.zip')
         if extracted_folders:
             zip_all_folders(extracted_dir, main_zip_path)
         else:
-            # If no folders were extracted, create an empty zip file
             with zipfile.ZipFile(main_zip_path, 'w') as zipf:
                 pass
 
