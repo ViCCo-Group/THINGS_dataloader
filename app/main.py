@@ -238,16 +238,20 @@ def download():
 
             elif 'openneuro' in url:                            
                 dataset_id = url.split('/')[-1]
-                #target_dir = os.path.join(download_dir, folder_name)
+                target_folder = os.path.join(extracted_dir, folder_name)  # Create the target folder
+
                 try:
-                    # Download the dataset
-                    download_dataset_openneuro(dataset_id, include_files, extracted_dir)
-                    
-                    # Append the target_dir to extracted_folders
-                    extracted_folders.append(extracted_dir)
+                    # Ensure the target folder exists
+                    os.makedirs(target_folder, exist_ok=True)
+
+                    # Download the dataset directly into the target folder
+                    download_dataset_openneuro(dataset_id, include_files, target_folder)
+
+                    # Append the target_folder to extracted_folders
+                    extracted_folders.append(target_folder)
+
                 except Exception as e:
                     return f"Error executing openneuro-py command: {e}", 500
-
 
         readme_path = os.path.join(extracted_dir, 'README.txt')
         create_readme(selected_urls, datasets, descriptions, readme_path)  # Create the README file with only selected datasets
