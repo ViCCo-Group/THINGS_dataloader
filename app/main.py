@@ -116,31 +116,29 @@ def get_filename_from_response(response):
     return None
 
 
-def download_dataset_openneuro(dataset_id, include_files, exclude_files, download_path):
+def download_dataset_openneuro(dataset_id, exclude_files, include_files, download_path):
     try:
         # Ensure the target directory exists
         os.makedirs(download_path, exist_ok=True)
-
+        
         # Construct the base openneuro-py command
         command = ['openneuro-py', 'download', f'--dataset={dataset_id}', f'--target-dir={download_path}']
 
-        # Filter out empty strings from include_files and exclude_files
-        include_files = [file for file in include_files if file.strip()]
+        # Clean and filter out empty strings from exclude_files and include_files
         exclude_files = [file for file in exclude_files if file.strip()]
+        include_files = [file for file in include_files if file.strip()]
 
-        # Use --include if include_files is not empty; otherwise, use --exclude
-        if include_files:
-            for include_file in include_files:
-                command.append(f'--include={include_file}')
-        elif exclude_files:
-            for exclude_file in exclude_files:
-                command.append(f'--exclude={exclude_file}')
-
+        # Determine which flag to use based on which list is not empty
+        if exclude_files:
+            command.extend([f'--exclude={",".join(exclude_files)}'])
+        elif include_files:
+            command.extend([f'--include={",".join(include_files)}'])
+        
         print(f"Running command: {' '.join(command)}")  # Debug: Print the constructed command
-
+        
         # Run the command
         result = subprocess.run(command, capture_output=True, text=True)
-
+        
         # Check if the download command was successful
         if result.returncode != 0:
             print(f"Error downloading dataset {dataset_id}: {result.stderr}")
@@ -149,12 +147,13 @@ def download_dataset_openneuro(dataset_id, include_files, exclude_files, downloa
         # Check if the directory is empty
         if not os.listdir(download_path):
             raise Exception("Download directory is empty. No files were downloaded.")
-
+        
         print(f"Successfully downloaded dataset {dataset_id} to {download_path}")
-
+    
     except Exception as e:
         print(f"Error during download: {e}")
         raise
+
 
 def create_readme(selected_urls, datasets, descriptions, readme_path):
     with open(readme_path, 'w') as readme:
