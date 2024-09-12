@@ -9,3 +9,4 @@ Werkzeug==3.0.4
 click==8.1.7
 itsdangerous==2.2.0
 MarkupSafe==2.1.5
+openneuro-py==2024.2.0

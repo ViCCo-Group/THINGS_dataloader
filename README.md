@@ -8,8 +8,8 @@ This repo is under active development and will let you query and load data from 
 
 `pip install flask`<br>
 `git clone git@github.com:ViCCo-Group/THINGS-dataloader_website.git`<br>
-`cd THINGS_dataloader`<br>
-`python website/app.py`
+`cd THINGS-dataloader_website`<br>
+`python app/main.py`
 
 
 

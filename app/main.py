@@ -3,6 +3,7 @@ import zipfile
 import shutil
 import tempfile
 import os
+import subprocess
 import requests
 from flask import Flask, render_template, request, send_file
 
@@ -10,16 +11,18 @@ app = Flask(__name__)
 
 def load_datasets():
     datasets = {}
-    with open('static/datasets.csv', mode='r') as file:
+    with open('app/static/datasets.csv', mode='r') as file:
         csv_reader = csv.DictReader(file)
         for row in csv_reader:
             name = row['name']
             sub_dataset_name = row['sub-dataset name']
             description = row['description']
-            files = row['files'].split(',')
+            files = row['files'].split('; ')
             download_url = row['download_url']
             size = row['size']
-            
+            include_files = row['include_files'].split('; ')
+            code = row.get('code', '')  # Fetch the code, if present
+
             if name not in datasets:
                 datasets[name] = []
 
@@ -29,13 +32,15 @@ def load_datasets():
                 'files': files,
                 'download_url': download_url,
                 'size': size,
-                'folder_name': f"{name}_{sub_dataset_name.replace(' ', '_')}"
+                'folder_name': f"{name}_{sub_dataset_name.replace(' ', '_')}",
+                'include_files': include_files,
+                'code': code
             })
     return datasets
 
 def load_descriptions():
     descriptions = {}
-    with open('static/dataset_descriptions.csv', mode='r') as file:
+    with open('app/static/dataset_descriptions.csv', mode='r') as file:
         csv_reader = csv.DictReader(file)
         for row in csv_reader:
             name = row['name']
@@ -66,12 +71,97 @@ def extract_and_rename_zip(zip_path, extract_to, new_folder_name):
         print(f"An error occurred: {e}")
 
 def zip_all_folders(source_dir, output_zip):
-    with zipfile.ZipFile(output_zip, 'w', zipfile.ZIP_DEFLATED) as zipf:
-        for foldername, subfolders, filenames in os.walk(source_dir):
-            for filename in filenames:
-                file_path = os.path.join(foldername, filename)
-                arcname = os.path.relpath(file_path, source_dir)
-                zipf.write(file_path, arcname)
+    try:
+        if not os.path.exists(source_dir) or not os.listdir(source_dir):
+            raise Exception("Source directory does not exist or is empty.")
+
+        print(f"Zipping contents of {source_dir} into {output_zip}")  # Debug print
+
+        with zipfile.ZipFile(output_zip, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            for foldername, subfolders, filenames in os.walk(source_dir):
+                print(f"Processing folder: {foldername}")  # Debug: Show folder being processed
+                for filename in filenames:
+                    file_path = os.path.join(foldername, filename)
+                    arcname = os.path.relpath(file_path, source_dir)
+                    zipf.write(file_path, arcname)
+                    print(f"Added file: {file_path}")  # Debug: Show each file added
+
+        print(f"Successfully created {output_zip}. Size: {os.path.getsize(output_zip)} bytes")
+
+    except Exception as e:
+        print(f"Error creating zip file: {e}")
+        raise
+
+def download_file(url, output_path):
+    try:
+        response = requests.get(url, stream=True)
+        response.raise_for_status()
+        with open(output_path, 'wb') as file:
+            for chunk in response.iter_content(chunk_size=8192):
+                file.write(chunk)
+    except requests.RequestException as e:
+        print(f"Error downloading file from {url}: {e}")
+        raise
+
+def get_filename_from_response(response):
+    content_disposition = response.headers.get('Content-Disposition')
+    if content_disposition:
+        parts = content_disposition.split(';')
+        for part in parts:
+            if 'filename=' in part:
+                filename = part.split('=')[-1].strip('"')
+                return filename
+    return None
+
+def download_dataset_openneuro(dataset_id, include_files, download_path):
+    try:
+        # Ensure the target directory exists
+        os.makedirs(download_path, exist_ok=True)
+        
+        # Construct the openneuro-py command
+        command = ['openneuro-py', 'download', f'--dataset={dataset_id}', f'--target-dir={download_path}']
+        
+        # Add include files if specified
+        if include_files:
+            for include_file in include_files:
+                command.append(f'--include={include_file}')
+        
+        print(f"Running command: {' '.join(command)}")  # Debug: Print the command
+        
+        # Run the command
+        result = subprocess.run(command, capture_output=True, text=True)
+        
+        # Check if the download command was successful
+        if result.returncode != 0:
+            print(f"Error downloading dataset {dataset_id}: {result.stderr}")
+            raise Exception(f"Download failed: {result.stderr}")
+
+        # Check if the directory is empty
+        if not os.listdir(download_path):
+            raise Exception("Download directory is empty. No files were downloaded.")
+        
+        print(f"Successfully downloaded dataset {dataset_id} to {download_path}")
+    
+    except Exception as e:
+        print(f"Error during download: {e}")
+        raise
+
+def create_readme(selected_urls, datasets, descriptions, readme_path):
+    with open(readme_path, 'w') as readme:
+        for name, items in datasets.items():
+            for item in items:
+                # Check if the dataset's download URL is in the selected URLs
+                if item['download_url'] in selected_urls:
+                    name_description = descriptions.get(name, 'No description available')
+                    readme.write(f"Name: {name}\n")
+                    readme.write(f"Name Description: {name_description}\n")
+                    readme.write(f"Sub-dataset Name: {item['sub_dataset_name']}\n")
+                    readme.write(f"Description: {item['description']}\n")
+                    readme.write(f"Files: {', '.join(item['files'])}\n")
+                    readme.write(f"Download URL: {item['download_url']}\n")
+                    readme.write(f"Size: {item['size']}\n")
+                    readme.write(f"Code: {item['code']}\n")
+                    readme.write("\n---\n\n")
 
 @app.route('/')
 def index():
@@ -82,11 +172,12 @@ def index():
 @app.route('/download', methods=['POST'])
 def download():
     selected_urls = request.form.getlist('datasets')
-    
+
     if not selected_urls:
         return "No datasets selected", 400
 
     datasets = load_datasets()
+    descriptions = load_descriptions()
 
     with tempfile.TemporaryDirectory() as temp_dir:
         download_dir = os.path.join(temp_dir, 'downloads')
@@ -97,37 +188,83 @@ def download():
         extracted_folders = []
 
         for url in selected_urls:
-            # Identify the dataset entry corresponding to the URL
             dataset_info = next(
                 (item for items in datasets.values() for item in items if item['download_url'] == url), 
                 None
             )
-            
+
             if not dataset_info:
                 continue
-            
+
             folder_name = dataset_info['folder_name']
-            zip_path = os.path.join(download_dir, folder_name + '.zip')
+            files = dataset_info['files']
+            include_files = dataset_info.get('include_files')
 
-            try:
-                # Download the zip file
-                response = requests.get(url, stream=True)
-                response.raise_for_status()
-
-                with open(zip_path, 'wb') as zip_file:
-                    zip_file.write(response.content)
-
-                # Extract and rename the zip file
-                extract_and_rename_zip(zip_path, extracted_dir, folder_name)
-                extracted_folders.append(os.path.join(extracted_dir, folder_name))
+            if 'figshare' in url:
+                zip_path = os.path.join(download_dir, folder_name + '.zip')
                 
-            except requests.RequestException as e:
-                return f"Error downloading file: {e}", 500
-            except zipfile.BadZipFile as e:
-                return f"Error processing zip file: {e}", 500
+                try:
+                    # Download the zip file
+                    download_file(url, zip_path)
+
+                    # Extract and rename the zip file
+                    extract_and_rename_zip(zip_path, extracted_dir, folder_name)
+                    extracted_folders.append(os.path.join(extracted_dir, folder_name))
+                    
+                except requests.RequestException as e:
+                    return f"Error downloading file: {e}", 500
+                except zipfile.BadZipFile as e:
+                    return f"Error processing zip file: {e}", 500
+            
+            elif 'osf' in url:
+                folder_path = os.path.join(extracted_dir, folder_name)
+                os.makedirs(folder_path, exist_ok=True)
+                
+                try:
+                    # Download the file from OSF and get the original filename
+                    response = requests.get(url, stream=True)
+                    response.raise_for_status()
+
+                    filename = get_filename_from_response(response)
+                    if filename is None:
+                        filename = url.split('/')[-1]  # Use the last part of URL as fallback
+                    
+                    file_path = os.path.join(folder_path, filename)
+                    download_file(url, file_path)
+                    extracted_folders.append(folder_path)
+                
+                except requests.RequestException as e:
+                    return f"Error downloading file: {e}", 500
+
+            elif 'openneuro' in url:                            
+                dataset_id = url.split('/')[-1]
+                target_folder = os.path.join(extracted_dir, folder_name)  # Create the target folder
+
+                try:
+                    # Ensure the target folder exists
+                    os.makedirs(target_folder, exist_ok=True)
+
+                    # Download the dataset directly into the target folder
+                    download_dataset_openneuro(dataset_id, include_files, target_folder)
+
+                    # Append the target_folder to extracted_folders
+                    extracted_folders.append(target_folder)
+
+                except Exception as e:
+                    return f"Error executing openneuro-py command: {e}", 500
+
+        readme_path = os.path.join(extracted_dir, 'README.txt')
+        create_readme(selected_urls, datasets, descriptions, readme_path)  # Create the README file with only selected datasets
 
         main_zip_path = os.path.join(temp_dir, 'things-datasets.zip')
-        zip_all_folders(extracted_dir, main_zip_path)
+        if extracted_folders:
+            zip_all_folders(extracted_dir, main_zip_path)
+        else:
+            with zipfile.ZipFile(main_zip_path, 'w') as zipf:
+                pass
+
+        if not os.path.exists(main_zip_path) or os.path.getsize(main_zip_path) == 0:
+            return "Failed to create the zip file", 500
 
         return send_file(main_zip_path, as_attachment=True, download_name='things-datasets.zip', mimetype='application/zip')
 
