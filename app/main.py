@@ -116,7 +116,7 @@ def get_filename_from_response(response):
     return None
 
 
-def download_dataset_openneuro(dataset_id, exclude_files, include_files, download_path):
+def download_dataset_openneuro(dataset_id, include_files, exclude_files, download_path):
     try:
         # Ensure the target directory exists
         os.makedirs(download_path, exist_ok=True)
@@ -124,12 +124,8 @@ def download_dataset_openneuro(dataset_id, exclude_files, include_files, downloa
         # Construct the base openneuro-py command
         command = ['openneuro-py', 'download', f'--dataset={dataset_id}', f'--target-dir={download_path}']
 
-        # Clean and filter out empty strings from exclude_files and include_files
-        exclude_files = [file for file in exclude_files if file.strip()]
-        include_files = [file for file in include_files if file.strip()]
-
         # Determine which flag to use based on which list is not empty
-        if exclude_files:
+        if exclude_files is not None:
             command.extend([f'--exclude={",".join(exclude_files)}'])
         elif include_files:
             command.extend([f'--include={",".join(include_files)}'])
