@@ -20,6 +20,7 @@ def load_datasets():
             files = row['files'].split('; ')
             download_url = row['download_url']
             size = row['size']
+            exclude_files = row['exclude_files'].split('; ')
             include_files = row['include_files'].split('; ')
             code = row.get('code', '')  # Fetch the code, if present
 
@@ -33,6 +34,7 @@ def load_datasets():
                 'download_url': download_url,
                 'size': size,
                 'folder_name': f"{name}_{sub_dataset_name.replace(' ', '_')}",
+                'exclude_files': exclude_files,
                 'include_files': include_files,
                 'code': code
             })
@@ -113,20 +115,22 @@ def get_filename_from_response(response):
                 return filename
     return None
 
-def download_dataset_openneuro(dataset_id, include_files, download_path):
+
+def download_dataset_openneuro(dataset_id, include_files, exclude_files, download_path):
     try:
         # Ensure the target directory exists
         os.makedirs(download_path, exist_ok=True)
         
-        # Construct the openneuro-py command
+        # Construct the base openneuro-py command
         command = ['openneuro-py', 'download', f'--dataset={dataset_id}', f'--target-dir={download_path}']
+
+        # Determine which flag to use based on which list is not empty
+        if exclude_files is not None:
+            command.extend([f'--exclude={",".join(exclude_files)}'])
+        elif include_files:
+            command.extend([f'--include={",".join(include_files)}'])
         
-        # Add include files if specified
-        if include_files:
-            for include_file in include_files:
-                command.append(f'--include={include_file}')
-        
-        print(f"Running command: {' '.join(command)}")  # Debug: Print the command
+        print(f"Running command: {' '.join(command)}")  # Debug: Print the constructed command
         
         # Run the command
         result = subprocess.run(command, capture_output=True, text=True)
@@ -145,6 +149,7 @@ def download_dataset_openneuro(dataset_id, include_files, download_path):
     except Exception as e:
         print(f"Error during download: {e}")
         raise
+
 
 def create_readme(selected_urls, datasets, descriptions, readme_path):
     with open(readme_path, 'w') as readme:
@@ -198,6 +203,7 @@ def download():
 
             folder_name = dataset_info['folder_name']
             files = dataset_info['files']
+            exclude_files = dataset_info.get('exclude_files')
             include_files = dataset_info.get('include_files')
 
             if 'figshare' in url:
@@ -238,14 +244,14 @@ def download():
 
             elif 'openneuro' in url:                            
                 dataset_id = url.split('/')[-1]
-                target_folder = os.path.join(extracted_dir, folder_name)  # Create the target folder
+                target_folder = os.path.join(extracted_dir, folder_name)
 
                 try:
                     # Ensure the target folder exists
                     os.makedirs(target_folder, exist_ok=True)
 
-                    # Download the dataset directly into the target folder
-                    download_dataset_openneuro(dataset_id, include_files, target_folder)
+                    # Pass include_files and exclude_files to the function
+                    download_dataset_openneuro(dataset_id, include_files, exclude_files, target_folder)
 
                     # Append the target_folder to extracted_folders
                     extracted_folders.append(target_folder)
