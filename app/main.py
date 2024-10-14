@@ -168,7 +168,7 @@ def create_readme(selected_urls, datasets, descriptions, readme_path):
         for name, items in datasets.items():
             for item in items:
                 # Check if the dataset's download URL is in the selected URLs
-                if item['download_url'] in selected_urls:
+                if item['value_html'] in selected_urls:
                     name_description = descriptions.get(name, 'No description available')
                     readme.write(f"Name: {name}\n")
                     readme.write(f"Name Description: {name_description}\n")
