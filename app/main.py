@@ -9,6 +9,14 @@ from flask import Flask, render_template, request, send_file
 
 app = Flask(__name__)
 
+def extract_derivative_attr(str):
+    str = str.strip()
+    l = str.split('; ')
+    if len(l) == 0 or (len(l) == 1 and l[0] == ""):
+        return None
+    else:
+        return l 
+
 def load_datasets():
     datasets = {}
     with open('app/static/datasets.csv', mode='r') as file:
@@ -19,9 +27,10 @@ def load_datasets():
             description = row['description']
             files = row['files'].split('; ')
             download_url = row['download_url']
+            value_html = name+"_"+sub_dataset_name
             size = row['size']
-            exclude_files = row['exclude_files'].split('; ')
-            include_files = row['include_files'].split('; ')
+            exclude_files = extract_derivative_attr(row['exclude_files'])#.split('; ')
+            include_files = extract_derivative_attr(row['include_files'])#.split('; ')
             code = row.get('code', '')  # Fetch the code, if present
 
             if name not in datasets:
@@ -32,6 +41,7 @@ def load_datasets():
                 'description': description,
                 'files': files,
                 'download_url': download_url,
+                'value_html': value_html,
                 'size': size,
                 'folder_name': f"{name}_{sub_dataset_name.replace(' ', '_')}",
                 'exclude_files': exclude_files,
@@ -125,6 +135,8 @@ def download_dataset_openneuro(dataset_id, include_files, exclude_files, downloa
         command = ['openneuro-py', 'download', f'--dataset={dataset_id}', f'--target-dir={download_path}']
 
         # Determine which flag to use based on which list is not empty
+
+
         if exclude_files is not None:
             command.extend([f'--exclude={",".join(exclude_files)}'])
         elif include_files:
@@ -194,24 +206,25 @@ def download():
 
         for url in selected_urls:
             dataset_info = next(
-                (item for items in datasets.values() for item in items if item['download_url'] == url), 
+                (item for items in datasets.values() for item in items if item['value_html'] == url), 
                 None
             )
 
             if not dataset_info:
                 continue
 
+            url_value = dataset_info['download_url']
             folder_name = dataset_info['folder_name']
             files = dataset_info['files']
             exclude_files = dataset_info.get('exclude_files')
             include_files = dataset_info.get('include_files')
 
-            if 'figshare' in url:
+            if 'figshare' in url_value:
                 zip_path = os.path.join(download_dir, folder_name + '.zip')
                 
                 try:
                     # Download the zip file
-                    download_file(url, zip_path)
+                    download_file(url_value, zip_path)
 
                     # Extract and rename the zip file
                     extract_and_rename_zip(zip_path, extracted_dir, folder_name)
@@ -222,28 +235,28 @@ def download():
                 except zipfile.BadZipFile as e:
                     return f"Error processing zip file: {e}", 500
             
-            elif 'osf' in url:
+            elif 'osf' in url_value:
                 folder_path = os.path.join(extracted_dir, folder_name)
                 os.makedirs(folder_path, exist_ok=True)
                 
                 try:
                     # Download the file from OSF and get the original filename
-                    response = requests.get(url, stream=True)
+                    response = requests.get(url_value, stream=True)
                     response.raise_for_status()
 
                     filename = get_filename_from_response(response)
                     if filename is None:
-                        filename = url.split('/')[-1]  # Use the last part of URL as fallback
+                        filename = url_value.split('/')[-1]  # Use the last part of URL as fallback
                     
                     file_path = os.path.join(folder_path, filename)
-                    download_file(url, file_path)
+                    download_file(url_value, file_path)
                     extracted_folders.append(folder_path)
                 
                 except requests.RequestException as e:
                     return f"Error downloading file: {e}", 500
 
-            elif 'openneuro' in url:                            
-                dataset_id = url.split('/')[-1]
+            elif 'openneuro' in url_value:                            
+                dataset_id = url_value.split('/')[-1]
                 target_folder = os.path.join(extracted_dir, folder_name)
 
                 try:
