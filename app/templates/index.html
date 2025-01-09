@@ -91,9 +91,57 @@
     </div>
      <script>
         function ShellScripting(x) {
-          document.getElementById("shellscript").value = x;
-          document.getElementById('datasetsForm').submit();
+            var thresSize = 1; //in GB
+            var checked = false; //bool
+            for (let i = 0; i < document.getElementsByName('datasets').length; i++) {
+                if (document.getElementsByName('datasets').item(i).checked == true){
+                    checked = true;
+                    break;
+                }
+            }
+            if (checked == false) {
+                alert("No Option selected for Downloading");
+            }else{
+
+                var totalDownloadSize = 0;
+                for (let i = 0; i < document.getElementsByName('datasets').length; i++) {
+                    if (document.getElementsByName('datasets').item(i).checked == true){
+                        var size = 0;
+                        var sizeTxt = document.getElementsByClassName("size").item(i).innerHTML.slice(6);
+
+                        if (sizeTxt.includes("GB")){
+                            var a = sizeTxt.split('GB');
+                            size = parseFloat(a[0]);
+                        }else if (sizeTxt.includes("MB")) {
+                            var a = sizeTxt.split('MB');
+                            size = parseFloat(a[0])/1024;
+                        }else if (sizeTxt.includes("KB")) {
+                            var a = sizeTxt.split('KB');
+                            size = parseFloat(a[0])/(1024*1024);
+                        }else{
+                            continue;
+                        }
+
+                        totalDownloadSize += size;
+                    }
+                }
+
+                if (x == 0 && totalDownloadSize >= thresSize) {
+                    var ans = window.confirm("Download Size is too big, download might not work;\nDo you want to continue via the browser?", "Continue");
+                    if (ans) {
+                        //use browser
+                        x = 0
+                    }else{
+                        //use cli
+                        x = 1;
+                    }
+                }
+
+                document.getElementById("shellscript").value = x;
+                document.getElementById('datasetsForm').submit();
+            }
         }
+
         
     </script> 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/js/bootstrap.bundle.min.js"></script>
