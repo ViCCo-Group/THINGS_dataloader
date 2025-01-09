@@ -1,3 +1,9 @@
+#to run the sh file
+#chmod +x filename
+#./filename
+
+##we need to update the js such that if no option is selected, it will just give a prompt but wouldn't submit the form
+
 import csv
 import zipfile
 import shutil
@@ -84,7 +90,13 @@ def extract_and_rename_zip(zip_path, extract_to, new_folder_name):
     except Exception as e:
         print(f"An error occurred: {e}")
 
+def zip_shell_files(source_dir, output_zip):
+    #just zip the files within source_dir into output_zip
+    #print once it's successful
+    return
+
 def zip_all_folders(source_dir, output_zip):
+    print("inside zipping all folder function")
     try:
         if not os.path.exists(source_dir) or not os.listdir(source_dir):
             raise Exception("Source directory does not exist or is empty.")
@@ -95,6 +107,7 @@ def zip_all_folders(source_dir, output_zip):
             for foldername, subfolders, filenames in os.walk(source_dir):
                 print(f"Processing folder: {foldername}")  # Debug: Show folder being processed
                 for filename in filenames:
+                    print(filename)
                     file_path = os.path.join(foldername, filename)
                     arcname = os.path.relpath(file_path, source_dir)
                     zipf.write(file_path, arcname)
@@ -195,6 +208,27 @@ def create_readme(selected_urls, datasets, descriptions, readme_path):
                     readme.write(f"Code: {item['code']}\n")
                     readme.write("\n---\n\n")
 
+def create_shell_readme(selected_urls, datasets, descriptions, readme_path):
+    #we will inside output zip with sh file, instruction.txt and readme.txt...
+    #so maybe we can reuse the code from create_readme function instead
+    for name, items in datasets.items():
+        for item in items:
+            # Check if the dataset's download URL is in the selected URLs
+            if item['value_html'] in selected_urls:
+                print(("selected"))
+                name_description = descriptions.get(name, 'No description available')
+                readme.write(f"Name: {name}\n")
+                readme.write(f"Name Description: {name_description}\n")
+                readme.write(f"Sub-dataset Name: {item['sub_dataset_name']}\n")
+                readme.write(f"Description: {item['description']}\n")
+                readme.write(f"Files: {', '.join(item['files'])}\n")
+                readme.write(f"Download URL: {item['download_url']}\n")
+                readme.write(f"Size: {item['size']}\n")
+                readme.write(f"Code: {item['code']}\n")
+                readme.write("\n---\n\n")
+
+
+
 
 @app.route('/')
 def index():
@@ -271,9 +305,15 @@ def download():
                         extracted_folders.append(os.path.join(extracted_dir, folder_name))
                     
                 except requests.RequestException as e:
-                    return f"Error downloading file: {e}", 500
+                    # return f"Error downloading file: {e}", 500
+                    print ("Error while downloading file: "+ url_value+"\n"+e)
                 except zipfile.BadZipFile as e:
-                    return f"Error processing zip file: {e}", 500
+                    # return f"Error processing zip file: {e}", 500
+                    print ("Error processing zip file: "+ url_value+"\n"+e)
+                except e:
+                    print ("Error while downloading file: "+ url_value)
+
+                    ##if we are getting error how to pass this to website, saying we couldn't download one or more specific packages
             
             elif 'osf' in url_value:
 
@@ -314,7 +354,10 @@ def download():
                         extracted_folders.append(folder_path)
                     
                     except requests.RequestException as e:
-                        return f"Error downloading file: {e}", 500
+                        # return f"Error downloading file: {e}", 500
+                        print ("Error downloading file: "+ url_value+"\n"+e)
+                    except e:
+                        print ("Error while downloading file: "+ url_value)
 
             elif 'openneuro' in url_value:                            
                 dataset_id = url_value.split('/')[-1]
@@ -335,40 +378,50 @@ def download():
                     extracted_folders.append(target_folder)
 
                 except Exception as e:
-                    return f"Error executing openneuro-py command: {e}", 500
+                    # return f"Error executing openneuro-py command: {e}", 500
+                    print ("Error executing openneuro-py command: "+ url_value+"\n"+e)
+                except e:
+                    print ("Error while downloading file: "+ url_value)
 
         if is_shell:
             print("commands to execute")
             print("\n".join(SHELL_LINES))
+            
             #remove the zip files
-            SHELL_LINES.append("rm "+zip_folderpath+"/*.zip")
+            # SHELL_LINES.append("rm "+zip_folderpath+"/*.zip")
 
             ##create a shell script and return that using send_file
-            shell_filename = os.path.join(temp_dir, "things-download.sh")
+            shell_filename = os.path.join(extracted_dir, "things-download.sh")
             with open(shell_filename, 'w') as sh_file_ptr:
                 for line in SHELL_LINES:
                     sh_file_ptr.write(f"{line}\n")
-            
-            #do we need readme file too with this
-            
-            return send_file(shell_filename, as_attachment=True, download_name='things-datasets-download.sh')
 
+            ##Add Instructions file inside the extracted_dir
+            instruction_filename = os.path.join(extracted_dir, "instructions.txt")
+            with open(instruction_filename, 'w') as inst_file_ptr:
+                for line in ["To run the Shell script please type following command on the terminal", "$chmod +x things-download.sh", "$./things-download.sh"]:
+                    inst_file_ptr.write(f"{line}\n")
+
+
+        main_zip_path = os.path.join(temp_dir, 'things-datasets.zip')
+
+        readme_path = os.path.join(extracted_dir, 'README.txt')
+        create_readme(selected_urls, datasets, descriptions, readme_path)  # Create the README file with only selected datasets
+
+        if is_shell:
+            zip_all_folders(extracted_dir, main_zip_path)
         else:
-            readme_path = os.path.join(extracted_dir, 'README.txt')
-            create_readme(selected_urls, datasets, descriptions, readme_path)  # Create the README file with only selected datasets
-
-            main_zip_path = os.path.join(temp_dir, 'things-datasets.zip')
-
+            
             if extracted_folders:
                 zip_all_folders(extracted_dir, main_zip_path)
             else:
                 with zipfile.ZipFile(main_zip_path, 'w') as zipf:
                     pass
 
-            if not os.path.exists(main_zip_path) or os.path.getsize(main_zip_path) == 0:
-                return "Failed to create the zip file", 500
+        if not os.path.exists(main_zip_path) or os.path.getsize(main_zip_path) == 0:
+            return "Failed to create the zip file", 500
 
-            return send_file(main_zip_path, as_attachment=True, download_name='things-datasets.zip', mimetype='application/zip')
+        return send_file(main_zip_path, as_attachment=True, download_name='things-datasets.zip', mimetype='application/zip')
 
 if __name__ == '__main__':
     app.run(debug=True)
